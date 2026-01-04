@@ -65,6 +65,33 @@ parameters:
       ja_JP: "返される最大アイテム数（デフォルト：10）"
     llm_description: "Maximum number of items to return (default: 10)"
     form: llm
+  - name: read_time_out
+    type: number
+    required: false
+    label:
+      en_US: Read Timeout
+      zh_Hans: 读取超时
+      ja_JP: 読み取りタイムアウト
+    human_description:
+      en_US: "Read timeout in seconds (default: 10)"
+      zh_Hans: "读取超时时间（秒，默认：10）"
+      ja_JP: "読み取りタイムアウト時間（秒、デフォルト：10）"
+    llm_description: "Read timeout in seconds (default: 10)"
+    form: llm
+  - name: content_truncate
+    type: boolean
+    required: false
+    default: false
+    label:
+      en_US: Content Truncate
+      zh_Hans: 内容截断
+      ja_JP: コンテンツ切り捨て
+    human_description:
+      en_US: "Whether to truncate content longer than 500 characters"
+      zh_Hans: "是否截断超过500字符的内容"
+      ja_JP: "500文字を超えるコンテンツを切り捨てるかどうか"
+    llm_description: "Whether to truncate content longer than 500 characters"
+    form: form
 extra:
   python:
     source: tools/rsshub.py

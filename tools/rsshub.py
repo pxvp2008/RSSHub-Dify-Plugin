@@ -17,6 +17,8 @@ class RsshubTool(Tool):
         limit = int(tool_parameters.get("limit", 10))
         base_url = tool_parameters.get("base_url", "https://rsshub.app")
         access_key = tool_parameters.get("access_key", "")
+        read_time_out = int(tool_parameters.get("read_time_out", 10))
+        content_truncate = tool_parameters.get("content_truncate", False)
         
         # 确保route以/开头
         if not route.startswith("/"):
@@ -45,65 +47,66 @@ class RsshubTool(Tool):
             # 重新组合URL
             url = urljoin(base_url, route + "?" + new_query)
         
-        try:
-            # 获取RSS源
-            response = requests.get(url, timeout=10)
-            response.raise_for_status()
+        # try:
+        # 获取RSS源
+        response = requests.get(url, timeout=read_time_out)
+        response.raise_for_status()
+        
+        # 解析XML
+        root = ET.fromstring(response.content)
+        
+        # 获取命名空间
+        namespaces = {'': root.tag.split('}')[0].strip('{')} if '}' in root.tag else {}
+        
+        # 提取标题和描述
+        channel = root.find('.//channel', namespaces)
+        if channel is None:
+            channel = root
             
-            # 解析XML
-            root = ET.fromstring(response.content)
+        title = channel.findtext('./title', '未知标题', namespaces)
+        description = channel.findtext('./description', '无描述', namespaces)
+        
+        # 提取条目
+        entries = []
+        items = channel.findall('./item', namespaces)
+        
+        for item in items[:limit]:
+            item_title = item.findtext('./title', '无标题', namespaces)
+            item_link = item.findtext('./link', '', namespaces)
+            item_pubDate = item.findtext('./pubDate', '', namespaces)
+            item_description = item.findtext('./description', '', namespaces)
             
-            # 获取命名空间
-            namespaces = {'': root.tag.split('}')[0].strip('{')} if '}' in root.tag else {}
+            # 清理HTML标签
+            clean_content = re.sub(r'<.*?>', '', item_description)
+            clean_content = html.unescape(clean_content)
             
-            # 提取标题和描述
-            channel = root.find('.//channel', namespaces)
-            if channel is None:
-                channel = root
-                
-            title = channel.findtext('./title', '未知标题', namespaces)
-            description = channel.findtext('./description', '无描述', namespaces)
+            # 格式化日期
+            published = item_pubDate
+            try:
+                if published:
+                    dt = datetime.strptime(published, '%a, %d %b %Y %H:%M:%S %Z')
+                    published = dt.strftime('%Y-%m-%d %H:%M:%S')
+            except:
+                # 如果日期解析失败，保持原样
+                pass
             
-            # 提取条目
-            entries = []
-            items = channel.findall('./item', namespaces)
+            entries.append({
+                'title': item_title,
+                'link': item_link,
+                'published': published,
+                # 'content': clean_content[:500] + ('...' if len(clean_content) > 500 else '')
+                'content': (clean_content[:500] + ('...' if len(clean_content) > 500 else '')) if content_truncate else clean_content
+            })
+        
+        # 返回结果
+        result = {
+            "title": title,
+            "description": description,
+            "url": url,
+            "entries": entries
+        }
+        
+        yield self.create_json_message(result)
             
-            for item in items[:limit]:
-                item_title = item.findtext('./title', '无标题', namespaces)
-                item_link = item.findtext('./link', '', namespaces)
-                item_pubDate = item.findtext('./pubDate', '', namespaces)
-                item_description = item.findtext('./description', '', namespaces)
-                
-                # 清理HTML标签
-                clean_content = re.sub(r'<.*?>', '', item_description)
-                clean_content = html.unescape(clean_content)
-                
-                # 格式化日期
-                published = item_pubDate
-                try:
-                    if published:
-                        dt = datetime.strptime(published, '%a, %d %b %Y %H:%M:%S %Z')
-                        published = dt.strftime('%Y-%m-%d %H:%M:%S')
-                except:
-                    # 如果日期解析失败，保持原样
-                    pass
-                
-                entries.append({
-                    'title': item_title,
-                    'link': item_link,
-                    'published': published,
-                    'content': clean_content[:500] + ('...' if len(clean_content) > 500 else '')
-                })
-            
-            # 返回结果
-            result = {
-                "title": title,
-                "description": description,
-                "url": url,
-                "entries": entries
-            }
-            
-            yield self.create_json_message(result)
-            
-        except Exception as e:
-            yield self.create_text_message(f"获取RSS源失败: {str(e)}")
+        # except Exception as e:
+        #     yield self.create_text_message(f"获取RSS源失败: {str(e)}")
